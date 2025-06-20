@@ -1,0 +1,462 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AstroBuddy - See what's happening above you</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="/static/astrobuddy.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Exo:wght@400;700&display=swap" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/fuse.js@6.6.2/dist/fuse.min.js"></script>
+</head>
+<body>
+    <div class="space-bg">
+        <canvas id="stars-canvas" class="stars"></canvas>
+        <canvas id="meteor-canvas" class="meteor-shower"></canvas>
+        <canvas id="glow-canvas" style="position:absolute;top:0;left:0;width:100vw;height:100vh;z-index:3;pointer-events:none;mix-blend-mode:screen;"></canvas>
+        <div style="position:fixed;top:18px;right:24px;z-index:10;">
+            <label style="user-select:none;color:#e0e6f0;font-family:'Orbitron',Arial,sans-serif;font-size:1rem;background:rgba(10,20,40,0.7);padding:6px 14px;border-radius:1em;box-shadow:0 2px 8px #000a;cursor:pointer;">
+                <input type="checkbox" id="toggle-light" checked style="accent-color:#1b6fff;margin-right:8px;vertical-align:middle;"> Hover Light
+            </label>
+        </div>
+    </div>
+    <nav class="navbar navbar-expand-lg navbar-space fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">AstroBuddy</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item" id="home-nav-item"><a class="nav-link" href="/">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/about/">About</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+    <div class="container text-center d-flex flex-column justify-content-center align-items-center" style="min-height: 100vh; z-index: 2; position: relative;">
+        <h1 class="display-2 fw-bold mb-2" style="font-family: 'Orbitron', Arial, sans-serif; letter-spacing: 2px;">AstroBuddy</h1>
+        <p class="lead mb-4" style="font-family: 'Exo', Arial, sans-serif;">See what's happening above you.</p>
+        <button id="detect-location" class="btn btn-primary btn-lg my-3">Detect My Location</button>
+        <div class="my-2">or</div>
+        <input type="text" id="city-input" class="form-control w-50 mx-auto" placeholder="Enter your city">
+        <button id="go-dashboard" class="btn btn-success mt-3">Show Events</button>
+        <div id="loader" class="loader-space mt-4" style="display:none;">
+            <div class="moon"></div>
+        </div>
+    </div>
+    <footer class="text-center mt-auto py-3" style="z-index:2; position:relative;">
+        <small>Made with &hearts; for stargazers</small>
+    </footer>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Conditional navigation
+        document.addEventListener('DOMContentLoaded', () => {
+            const homeNavItem = document.getElementById('home-nav-item');
+            if (window.location.pathname === '/') {
+                homeNavItem.style.display = 'none';
+            }
+        });
+
+        const OWM_API_KEY = '1df0a608a5c3b6ff0ce36959ae6a8ab4';
+        // Starfield and space objects
+        const canvas = document.getElementById('stars-canvas');
+        const ctx = canvas.getContext('2d');
+        let w = window.innerWidth, h = window.innerHeight;
+        canvas.width = w; canvas.height = h;
+        const isMobile = /Mobi|Android/i.test(navigator.userAgent);
+        const STAR_COUNT = isMobile ? 80 : 160;
+        let stars = Array.from({length: STAR_COUNT}, () => {
+            let speed = Math.random()*0.12+0.04;
+            let angle = Math.random()*2*Math.PI;
+            return {
+                x: Math.random()*w,
+                y: Math.random()*h,
+                r: Math.random()*1.5+0.7,
+                baseR: 0,
+                tw: Math.random()*Math.PI*2,
+                speed,
+                angle,
+                drift: Math.random()*0.02+0.01,
+                color: `rgba(255,255,255,${Math.random()*0.5+0.5})`
+            };
+        });
+        let parallax = {x: 0, y: 0};
+        let mouse = {x: w/2, y: h/2};
+        let hoverLight = true;
+        const toggleLight = document.getElementById('toggle-light');
+        toggleLight.checked = true;
+        toggleLight.onchange = () => { hoverLight = toggleLight.checked; };
+        if (isMobile) hoverLight = false;
+        function drawStars() {
+            ctx.clearRect(0,0,w,h);
+            // Draw hover light (radial gradient) if enabled
+            if (hoverLight && !isMobile) {
+                let grad = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 120);
+                grad.addColorStop(0, 'rgba(180,220,255,0.25)');
+                grad.addColorStop(0.3, 'rgba(120,180,255,0.10)');
+                grad.addColorStop(1, 'rgba(0,0,32,0)');
+                ctx.save();
+                ctx.globalCompositeOperation = 'lighter';
+                ctx.beginPath();
+                ctx.arc(mouse.x, mouse.y, 120, 0, 2*Math.PI);
+                ctx.fillStyle = grad;
+                ctx.fill();
+                ctx.restore();
+            }
+            for (let i = 0; i < stars.length; i++) {
+                let s = stars[i];
+                // Parallax offset
+                let px = s.x + parallax.x * s.drift * 40;
+                let py = s.y + parallax.y * s.drift * 40;
+                // Twinkle
+                let twinkle = 0.7 + 0.3 * Math.sin(Date.now()/700 + s.tw);
+                let r = s.r * (1 + 0.18 * Math.sin(Date.now()/500 + s.tw));
+                // Interactive light effect
+                if (hoverLight && !isMobile) {
+                    let dist = Math.hypot(mouse.x - px, mouse.y - py);
+                    if (dist < 120) {
+                        r *= 1.5 - dist/240;
+                        ctx.shadowColor = '#b0e0ff';
+                        ctx.shadowBlur = 16 - dist/10;
+                    } else {
+                        ctx.shadowColor = '#fff';
+                        ctx.shadowBlur = 8;
+                    }
+                } else {
+                    ctx.shadowColor = '#fff';
+                    ctx.shadowBlur = 8;
+                }
+                ctx.save();
+                ctx.globalAlpha = twinkle;
+                ctx.beginPath();
+                ctx.arc(px, py, r, 0, 2 * Math.PI);
+                ctx.fillStyle = s.color;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+        function animateStars() {
+            // Move stars
+            for (let s of stars) {
+                s.x += Math.cos(s.angle) * s.speed;
+                s.y += Math.sin(s.angle) * s.speed;
+                // Gentle spiral drift
+                s.angle += (Math.random()-0.5)*0.002 + s.drift*0.01;
+                // Wrap around
+                if (s.x < 0) s.x += w;
+                if (s.x > w) s.x -= w;
+                if (s.y < 0) s.y += h;
+                if (s.y > h) s.y -= h;
+            }
+            // Parallax decay
+            parallax.x += (0 - parallax.x) * 0.04;
+            parallax.y += (0 - parallax.y) * 0.04;
+            drawStars();
+            animateObjects();
+            requestAnimationFrame(animateStars);
+        }
+        if (!isMobile) {
+            window.addEventListener('mousemove', e => {
+                mouse.x = e.clientX;
+                mouse.y = e.clientY;
+                let nx = (e.clientX - w/2) / w;
+                let ny = (e.clientY - h/2) / h;
+                parallax.x += (nx * -1 - parallax.x) * 0.2;
+                parallax.y += (ny * -1 - parallax.y) * 0.2;
+            });
+        }
+        window.addEventListener('resize', () => {
+            w = window.innerWidth; h = window.innerHeight;
+            canvas.width = w; canvas.height = h;
+            meteorW = window.innerWidth; meteorH = window.innerHeight;
+            meteorCanvas.width = meteorW; meteorCanvas.height = meteorH;
+        });
+        // --- Space objects animation ---
+        const objects = [
+            {el: document.getElementById('astronaut'), x: 0.1, y: 0.2, vx: 0.0007, vy: 0.0002, base: [0.1,0.2], amp: [0.02,0.03], phase: Math.random()*6},
+            {el: document.getElementById('satellite'), x: 0.8, y: 0.6, vx: -0.0005, vy: 0.0001, base: [0.8,0.6], amp: [0.01,0.02], phase: Math.random()*6},
+            {el: document.getElementById('planet'), x: 0.3, y: 0.75, vx: 0.0002, vy: -0.0001, base: [0.3,0.75], amp: [0.01,0.01], phase: Math.random()*6}
+        ];
+        function animateObjects() {
+            if (isMobile) return;
+            for (let obj of objects) {
+                if (!obj.el) continue;
+                // Orbit/float
+                obj.x += obj.vx; obj.y += obj.vy;
+                // Loop
+                if (obj.x < 0) obj.x = 1; if (obj.x > 1) obj.x = 0;
+                if (obj.y < 0) obj.y = 1; if (obj.y > 1) obj.y = 0;
+                // Sine float
+                let px = (obj.x + Math.sin(Date.now()/2000 + obj.phase)*obj.amp[0] + parallax.x*0.04) * w;
+                let py = (obj.y + Math.cos(Date.now()/1800 + obj.phase)*obj.amp[1] + parallax.y*0.04) * h;
+                obj.el.style.left = px + 'px';
+                obj.el.style.top = py + 'px';
+            }
+        }
+        // Astronaut hover = wave
+        const astronaut = document.getElementById('astronaut');
+        if (astronaut) {
+            astronaut.addEventListener('mouseenter', () => astronaut.classList.add('astronaut-hover'));
+            astronaut.addEventListener('mouseleave', () => astronaut.classList.remove('astronaut-hover'));
+        }
+        // --- Comet streak ---
+        const comet = document.getElementById('comet');
+        function launchComet() {
+            if (!comet || isMobile) return;
+            // Randomize start position
+            let y = Math.random()*0.7*h + 0.1*h;
+            comet.style.top = y + 'px';
+            comet.style.left = (Math.random()*0.5+0.2)*w + 'px';
+            comet.style.display = 'block';
+            comet.classList.remove('comet-anim');
+            void comet.offsetWidth; // force reflow
+            comet.classList.add('comet-anim');
+            comet.style.animation = 'cometStreak 1.2s linear';
+            setTimeout(() => comet.style.display = 'none', 1200);
+            setTimeout(launchComet, Math.random()*10000+10000); // 10–20s
+        }
+        setTimeout(launchComet, Math.random()*10000+10000);
+        // --- Start animation ---
+        if (!isMobile) animateStars();
+        // Loader logic
+        function showLoader() {
+            document.getElementById('loader').style.display = 'flex';
+        }
+        function hideLoader() {
+            document.getElementById('loader').style.display = 'none';
+        }
+        document.getElementById('detect-location').onclick = function() {
+            showLoader();
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(function(position) {
+                    // Try to reverse geocode city name (optional, fallback to coords)
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    // Optionally, fetch city name from OpenWeatherMap reverse geocoding
+                    fetch(`https://api.openweathermap.org/geo/1.0/reverse?lat=${lat}&lon=${lon}&limit=1&appid=${OWM_API_KEY}`)
+                        .then(r => r.json())
+                        .then(data => {
+                            let city = data && data[0] && data[0].name ? data[0].name : '';
+                            window.location.href = `/dashboard/?lat=${lat}&lon=${lon}&city=${encodeURIComponent(city)}`;
+                        })
+                        .catch(() => {
+                            hideLoader();
+                            alert('Unable to detect location. Please enter your city.');
+                        });
+                }, function() {
+                    hideLoader();
+                    alert('Unable to detect location. Please enter your city.');
+                });
+            } else {
+                hideLoader();
+                alert('Geolocation is not supported by this browser.');
+            }
+        };
+        async function fetchCitySuggestions(city) {
+            // Use OWM geocoding to get a list of possible matches
+            const resp = await fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city.slice(0,2))}&limit=10&appid=${OWM_API_KEY}`);
+            const data = await resp.json();
+            return data;
+        }
+        document.getElementById('go-dashboard').onclick = async function() {
+            showLoader();
+            const city = document.getElementById('city-input').value.trim();
+            if (!city) {
+                hideLoader();
+                alert('Please enter a city name.');
+                return;
+            }
+            // Geocode city to lat/lon
+            fetch(`https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(city)}&limit=1&appid=${OWM_API_KEY}`)
+                .then(async r => {
+                    const data = await r.json();
+                    if (data && data[0] && data[0].lat && data[0].lon) {
+                        window.location.href = `/dashboard/?lat=${data[0].lat}&lon=${data[0].lon}&city=${encodeURIComponent(data[0].name)}`;
+                    } else {
+                        // Fuzzy match fallback
+                        const suggestions = await fetchCitySuggestions(city);
+                        if (suggestions && suggestions.length > 0) {
+                            const fuse = new Fuse(suggestions, { keys: ['name'], threshold: 0.4 });
+                            const result = fuse.search(city);
+                            if (result.length > 0) {
+                                const best = result[0].item;
+                                if (confirm(`City not found. Did you mean: ${best.name}?`)) {
+                                    window.location.href = `/dashboard/?lat=${best.lat}&lon=${best.lon}&city=${encodeURIComponent(best.name)}`;
+                                    return;
+                                }
+                            }
+                        }
+                        hideLoader();
+                        alert('City not found. Please check the spelling and try again.');
+                    }
+                })
+                .catch(() => {
+                    hideLoader();
+                    alert('Error fetching location. Please try again.');
+                });
+        };
+        // Meteor shower animation (realistic streaks + fireballs)
+        const meteorCanvas = document.getElementById('meteor-canvas');
+        const meteorCtx = meteorCanvas.getContext('2d');
+        let meteorW = window.innerWidth, meteorH = window.innerHeight;
+        meteorCanvas.width = meteorW; meteorCanvas.height = meteorH;
+        const isMobileMeteor = /Mobi|Android/i.test(navigator.userAgent);
+        const METEOR_MAX = isMobileMeteor ? 4 : 10;
+        const METEOR_INTERVAL_MIN = 1000, METEOR_INTERVAL_MAX = 3000;
+        let meteors = [];
+        let lastFireball = Date.now();
+        function spawnMeteor(fireball = false) {
+            // Randomize start at top or upper corners
+            let edge = Math.random() < 0.5 ? 'top' : 'corner';
+            let x, y, angle, speed, len, width, alpha, colorStops;
+            if (edge === 'top') {
+                x = Math.random() * meteorW;
+                y = -20;
+                angle = (Math.random() * 0.5 + 0.25) * Math.PI; // 45-135 deg
+            } else {
+                x = Math.random() < 0.5 ? -20 : meteorW + 20;
+                y = Math.random() * meteorH * 0.3;
+                angle = x < 0 ? (Math.random() * 0.3 + 0.2) * Math.PI : (Math.random() * 0.3 + 0.7) * Math.PI;
+            }
+            if (fireball) {
+                speed = Math.random() * 1.5 + 1.2;
+                len = Math.random() * 200 + 180;
+                width = Math.random() * 3 + 3.5;
+                alpha = 1;
+                colorStops = [
+                    { stop: 0, color: 'rgba(255,255,200,1)' },
+                    { stop: 0.1, color: 'rgba(255,180,80,0.9)' },
+                    { stop: 0.4, color: 'rgba(255,80,40,0.7)' },
+                    { stop: 0.8, color: 'rgba(255,255,255,0.2)' },
+                    { stop: 1, color: 'rgba(0,0,0,0)' }
+                ];
+            } else {
+                speed = Math.random() * 4 + (isMobileMeteor ? 2 : 4);
+                len = Math.random() * 120 + 80;
+                width = Math.random() * 1.2 + 1.2;
+                alpha = Math.random() * 0.4 + 0.6;
+                colorStops = [
+                    { stop: 0, color: `rgba(255,255,255,${alpha})` },
+                    { stop: 0.2, color: `rgba(180,220,255,${alpha*0.7})` },
+                    { stop: 0.7, color: `rgba(80,120,255,${alpha*0.2})` },
+                    { stop: 1, color: 'rgba(0,0,0,0)' }
+                ];
+            }
+            return {x, y, angle, speed, len, width, alpha, life: 1, fireball, colorStops};
+        }
+        function drawMeteors() {
+            meteorCtx.clearRect(0,0,meteorW,meteorH);
+            for (let m of meteors) {
+                let dx = Math.cos(m.angle) * m.len;
+                let dy = Math.sin(m.angle) * m.len;
+                // Trail gradient
+                let grad = meteorCtx.createLinearGradient(m.x, m.y, m.x + dx, m.y + dy);
+                for (let cs of m.colorStops) grad.addColorStop(cs.stop, cs.color);
+                meteorCtx.save();
+                meteorCtx.globalAlpha = m.life;
+                meteorCtx.strokeStyle = grad;
+                meteorCtx.shadowColor = m.fireball ? '#fff8b0' : '#fff';
+                meteorCtx.shadowBlur = m.fireball ? 32 : 16;
+                meteorCtx.lineWidth = m.width;
+                meteorCtx.beginPath();
+                meteorCtx.moveTo(m.x, m.y);
+                meteorCtx.lineTo(m.x + dx, m.y + dy);
+                meteorCtx.stroke();
+                meteorCtx.restore();
+                // Move
+                m.x += Math.cos(m.angle) * m.speed;
+                m.y += Math.sin(m.angle) * m.speed;
+                m.life *= m.fireball ? 0.992 : 0.985;
+            }
+            // Remove faded meteors
+            meteors = meteors.filter(m => m.life > 0.08 && m.x < meteorW+200 && m.x > -200 && m.y < meteorH+200);
+        }
+        let lastMeteorTime = 0;
+        function animateMeteors(ts) {
+            drawMeteors();
+            // Regular meteors
+            if (!lastMeteorTime || ts - lastMeteorTime > Math.random() * (METEOR_INTERVAL_MAX-METEOR_INTERVAL_MIN) + METEOR_INTERVAL_MIN) {
+                if (meteors.length < METEOR_MAX) meteors.push(spawnMeteor());
+                lastMeteorTime = ts;
+            }
+            // Fireball every ~20s
+            if (Date.now() - lastFireball > 20000) {
+                meteors.push(spawnMeteor(true));
+                lastFireball = Date.now();
+            }
+            requestAnimationFrame(animateMeteors);
+        }
+        window.addEventListener('resize', () => {
+            meteorW = window.innerWidth; meteorH = window.innerHeight;
+            meteorCanvas.width = meteorW; meteorCanvas.height = meteorH;
+        });
+        if (!isMobile) animateMeteors();
+        // --- Ambient Glow Effect ---
+        const glowCanvas = document.getElementById('glow-canvas');
+        const glowCtx = glowCanvas.getContext('2d');
+        let glowW = window.innerWidth, glowH = window.innerHeight;
+        glowCanvas.width = glowW; glowCanvas.height = glowH;
+        let glowEnabled = !isMobile;
+        let glowRadius = isMobile ? 0 : 180;
+        let glowColorStops = [
+            { stop: 0, color: 'rgba(180,220,255,0.35)' },
+            { stop: 0.4, color: 'rgba(120,180,255,0.18)' },
+            { stop: 0.8, color: 'rgba(120,80,255,0.08)' },
+            { stop: 1, color: 'rgba(0,0,32,0)' }
+        ];
+        let glowTarget = { x: w/2, y: h/2 };
+        let glowPos = { x: w/2, y: h/2 };
+        let lastGlowArea = null, lastGlowSound = 0;
+        const GLOW_SOUND_COOLDOWN = 1200; // ms
+        // Optionally, load a soft space hum sound
+        const glowAudio = new Audio('https://cdn.pixabay.com/audio/2022/10/16/audio_12b5b7b6b2.mp3');
+        glowAudio.volume = 0.12;
+        function drawGlow() {
+            glowCtx.clearRect(0,0,glowW,glowH);
+            if (!glowEnabled) return;
+            // Easing/trailing
+            glowPos.x += (glowTarget.x - glowPos.x) * 0.18;
+            glowPos.y += (glowTarget.y - glowPos.y) * 0.18;
+            // Draw radial gradient
+            let grad = glowCtx.createRadialGradient(glowPos.x, glowPos.y, 0, glowPos.x, glowPos.y, glowRadius);
+            for (let cs of glowColorStops) grad.addColorStop(cs.stop, cs.color);
+            glowCtx.save();
+            glowCtx.globalCompositeOperation = 'lighter';
+            glowCtx.beginPath();
+            glowCtx.arc(glowPos.x, glowPos.y, glowRadius, 0, 2*Math.PI);
+            glowCtx.fillStyle = grad;
+            glowCtx.filter = 'blur(8px)';
+            glowCtx.fill();
+            glowCtx.restore();
+            // Play hum if entering a new area (grid-based, cooldown)
+            let area = Math.floor(glowPos.x/120)+','+Math.floor(glowPos.y/120);
+            if (area !== lastGlowArea && Date.now()-lastGlowSound > GLOW_SOUND_COOLDOWN) {
+                if (!isMobile && hoverLight && glowAudio.paused) {
+                    glowAudio.currentTime = 0;
+                    glowAudio.play();
+                }
+                lastGlowArea = area;
+                lastGlowSound = Date.now();
+            }
+        }
+        function animateGlow() {
+            drawGlow();
+            requestAnimationFrame(animateGlow);
+        }
+        if (!isMobile) {
+            window.addEventListener('mousemove', e => {
+                glowTarget.x = e.clientX;
+                glowTarget.y = e.clientY;
+            });
+        } else {
+            glowEnabled = false;
+        }
+        window.addEventListener('resize', () => {
+            glowW = window.innerWidth; glowH = window.innerHeight;
+            glowCanvas.width = glowW; glowCanvas.height = glowH;
+        });
+        animateGlow();
+    </script>
+</body>
+</html> 

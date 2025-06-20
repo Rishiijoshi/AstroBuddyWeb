@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>About - AstroBuddy</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="/static/astrobuddy.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Exo:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="space-bg">
+        <canvas id="stars-canvas" class="stars"></canvas>
+        <img src="https://upload.wikimedia.org/wikipedia/commons/d/d0/International_Space_Station.svg" class="iss" alt="ISS">
+    </div>
+    <nav class="navbar navbar-expand-lg navbar-space fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">AstroBuddy</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav ms-auto">
+                    <li class="nav-item" id="home-nav-item"><a class="nav-link" href="/">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/about/">About</a></li>
+                </ul>
+            </div>
+        </div>
+    </nav>
+
+    <div class="about-container">
+        <!-- Welcome Section -->
+        <div class="about-section" style="animation-delay: 0s;">
+            <h1 class="about-title">🚀 Welcome to AstroBuddy</h1>
+            <p class="about-text">
+                AstroBuddy is your personal stargazing companion — a location-based astronomy event tracker designed to make the cosmos feel close to home. Whether you're a curious student, amateur astronomer, or just someone who loves the stars, AstroBuddy helps you discover what's happening <strong>right above you</strong>.
+            </p>
+            <img src="{% static 'assets/astronaut 1.png' %}" alt="Floating Astronaut" class="floating-astronaut">
+        </div>
+
+        <!-- What We Do Section -->
+        <div class="about-section" style="animation-delay: 0.2s;">
+            <h2 class="about-subtitle"><i class="bi bi-stars"></i>What We Do</h2>
+            <ul class="feature-list">
+                <li class="feature-item">
+                    <i class="bi bi-moon-stars text-info fs-4"></i>
+                    <span>Track real-time celestial events: moon phases, meteor showers, ISS passes</span>
+                </li>
+                <li class="feature-item">
+                    <i class="bi bi-cloud-sun text-warning fs-4"></i>
+                    <span>Deliver weather and sky visibility updates for your city</span>
+                </li>
+                <li class="feature-item">
+                    <i class="bi bi-image text-danger fs-4"></i>
+                    <span>Pull stunning cosmic visuals using NASA's open data</span>
+                </li>
+                <li class="feature-item">
+                    <i class="bi bi-geo-alt text-success fs-4"></i>
+                    <span>Show personalized sky data based on your GPS or city input</span>
+                </li>
+                <li class="feature-item">
+                    <i class="bi bi-bookmark-star text-primary fs-4"></i>
+                    <span>Let users save their favorite events in one place</span>
+                </li>
+            </ul>
+        </div>
+
+        <!-- Powered By Section -->
+        <div class="about-section" style="animation-delay: 0.4s;">
+            <h2 class="about-subtitle"><i class="bi bi-gear"></i>Powered By</h2>
+            <div class="tech-grid">
+                <div class="tech-item">
+                    <i class="bi bi-globe tech-icon"></i>
+                    <h3>NASA Open APIs</h3>
+                    <p>For astronomical images & space data</p>
+                </div>
+                <div class="tech-item">
+                    <i class="bi bi-cloud tech-icon"></i>
+                    <h3>OpenWeatherMap</h3>
+                    <p>To check visibility conditions</p>
+                </div>
+                <div class="tech-item">
+                    <i class="bi bi-code-slash tech-icon"></i>
+                    <h3>Django + Bootstrap</h3>
+                    <p>For a dynamic and responsive interface</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- AI Behind AstroBuddy Section -->
+        <div class="about-section" style="animation-delay: 0.5s;">
+            <h2 class="about-subtitle">
+                <i class="bi bi-robot"></i>
+                AI Behind AstroBuddy
+                <span class="badge bg-info ms-2">Smart Features</span>
+            </h2>
+            <div class="ai-features-grid">
+                <div class="ai-feature">
+                    <i class="bi bi-eye tech-icon"></i>
+                    <h3>Visibility Prediction</h3>
+                    <p>Our AI analyzes multiple data points including weather patterns, light pollution, and celestial positions to predict optimal viewing conditions for each event.</p>
+                </div>
+                <div class="ai-feature">
+                    <i class="bi bi-geo tech-icon"></i>
+                    <h3>Location Intelligence</h3>
+                    <p>Smart algorithms process your location to suggest the best stargazing spots nearby, considering factors like elevation, accessibility, and light pollution levels.</p>
+                </div>
+                <div class="ai-feature">
+                    <i class="bi bi-calendar-event tech-icon"></i>
+                    <h3>Event Recommendations</h3>
+                    <p>Personalized event suggestions based on your viewing history, local weather conditions, and astronomical significance.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Footer Section -->
+        <div class="about-section text-center" style="animation-delay: 0.6s;">
+            <p class="about-text">
+                <i class="bi bi-stars"></i>
+                Made with curiosity, code, and a love for the night sky.
+            </p>
+        </div>
+    </div>
+
+    <!-- Back to Top Button -->
+    <button class="back-to-top" id="backToTop" title="Back to Top">
+        <i class="bi bi-arrow-up"></i>
+    </button>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // Animated stars
+        const canvas = document.getElementById('stars-canvas');
+        const ctx = canvas.getContext('2d');
+        let w = window.innerWidth, h = window.innerHeight;
+        canvas.width = w; canvas.height = h;
+        let stars = Array.from({length: 120}, () => ({
+            x: Math.random() * w,
+            y: Math.random() * h,
+            r: Math.random() * 1.2 + 0.2,
+            d: Math.random() * 0.5 + 0.2
+        }));
+        function drawStars() {
+            ctx.clearRect(0,0,w,h);
+            ctx.save();
+            ctx.shadowColor = '#fff';
+            ctx.shadowBlur = 8;
+            stars.forEach(s => {
+                ctx.beginPath();
+                ctx.arc(s.x, s.y, s.r, 0, 2 * Math.PI);
+                ctx.fillStyle = '#fff';
+                ctx.globalAlpha = 0.7 + 0.3 * Math.sin(Date.now()/700 + s.x);
+                ctx.fill();
+            });
+            ctx.restore();
+        }
+        function animateStars() {
+            stars.forEach(s => {
+                s.x += Math.sin(Date.now()/20000 + s.y) * 0.02;
+                s.y += Math.cos(Date.now()/18000 + s.x) * 0.01;
+                if (s.x < 0) s.x = w;
+                if (s.x > w) s.x = 0;
+                if (s.y < 0) s.y = h;
+                if (s.y > h) s.y = 0;
+            });
+            drawStars();
+            requestAnimationFrame(animateStars);
+        }
+        animateStars();
+        window.addEventListener('resize', () => {
+            w = window.innerWidth; h = window.innerHeight;
+            canvas.width = w; canvas.height = h;
+        });
+
+        // Back to Top Button
+        const backToTopBtn = document.getElementById('backToTop');
+        window.addEventListener('scroll', () => {
+            if (window.scrollY > 300) {
+                backToTopBtn.classList.add('visible');
+            } else {
+                backToTopBtn.classList.remove('visible');
+            }
+        });
+        backToTopBtn.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
+
+        // Conditional navigation
+        document.addEventListener('DOMContentLoaded', () => {
+            const homeNavItem = document.getElementById('home-nav-item');
+            if (window.location.pathname === '/') {
+                homeNavItem.style.display = 'none';
+            }
+
+            const sections = document.querySelectorAll('.about-section');
+            sections.forEach((section, index) => {
+                section.style.animationDelay = `${index * 0.2}s`;
+            });
+        });
+    </script>
+</body>
+</html> 

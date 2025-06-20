@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+{% load static %}
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AstroBuddy Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="{% static 'astrobuddy.css' %}?v={% now "U" %}">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700&family=Exo:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="space-bg">
+        <canvas id="stars-canvas" class="stars"></canvas>
+        <img src="{% static 'assets/satellite.png' %}" class="iss" alt="ISS">
+    </div>
+    <nav class="navbar navbar-expand-lg navbar-space fixed-top">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="/">AstroBuddy</a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" aria-label="Toggle navigation">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item" id="home-nav-item"><a class="nav-link" href="/">Home</a></li>
+                    <li class="nav-item"><a class="nav-link" href="/about/">About</a></li>
+                </ul>
+                <div class="d-flex align-items-center">
+                    {% if user.is_authenticated %}
+                        <span class="navbar-text me-3">Welcome, {{ user.username }}!</span>
+                        <a href="{% url 'users:logout' %}" class="btn auth-btn btn-login">Logout</a>
+                    {% else %}
+                        <a href="{% url 'users:login' %}?next={{ request.get_full_path|urlencode }}" class="btn auth-btn btn-login">Login</a>
+                        <a href="{% url 'users:signup' %}?next={{ request.get_full_path|urlencode }}" class="btn auth-btn btn-signup">Sign Up</a>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="dashboard-main d-flex flex-column align-items-center w-100" style="min-height:100vh;">
+        <div class="container dashboard-container px-2 px-md-4 py-4 w-100" style="max-width:900px;">
+            <!-- Location Badge -->
+            <div class="location-badge">
+                <span class="badge location-text">
+                    <i class="bi bi-geo-alt"></i>
+                    Events visible from:
+                    <input type="text" id="city-input" class="form-control d-inline-block ms-2" style="width:160px;" value="{{ city|escape }}" placeholder="Enter city...">
+                    <button id="reset-location-btn" class="btn btn-outline-secondary btn-sm ms-1" title="Reset Location"><i class="bi bi-x"></i></button>
+                </span>
+            </div>
+
+            <!-- Moon & Weather Info -->
+            <div class="info-panel">
+                {% if moon_phase_name and moon_phase_name != 'Unknown' %}
+                <div class="moon-phase">
+                    <span class="moon-emoji">{{ moon_emoji }}</span>
+                    <span class="phase-name">{{ moon_phase_name }}</span>
+                </div>
+                {% endif %}
+                <div class="next-full-moon">
+                    <span class="badge bg-primary">
+                        🌕 Next Full Moon: {{ next_full_moon }}
+                        <span class="countdown">⏳ {{ countdown }}</span>
+                    </span>
+                </div>
+                <div class="weather-tip">
+                    <span class="badge bg-success">
+                        {{ stargaze_tip }}
+                        <i class="bi bi-robot ms-1" data-bs-toggle="tooltip" title="AI-powered recommendation based on weather patterns and celestial conditions"></i>
+                    </span>
+                </div>
+                <a href="https://stellarium-web.org/" target="_blank" class="sky-map-btn">
+                    🔭 View Live Sky Map
+                </a>
+            </div>
+
+            <!-- Sky Visibility with AI Badge -->
+            <div class="card card-space mb-4 visibility-panel">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <span class="fw-bold">
+                            🌤️ Sky Visibility:
+                            <span class="badge bg-info ms-2">
+                                <i class="bi bi-stars"></i> AI Powered
+                                <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip" title="Our AI analyzes weather patterns, light pollution, and celestial positions to predict optimal viewing conditions"></i>
+                            </span>
+                        </span>
+                        <span id="sky-visibility" class="ms-2">{{ weather.sky_visibility }}</span>
+                        <small class="text-muted">({{ weather.description }})</small>
+                    </div>
+                    <button id="refresh-btn" class="btn btn-outline-info"><i class="bi bi-arrow-repeat"></i> Refresh</button>
+                </div>
+            </div>
+
+            <!-- Floating Star Icon for Saved Events Sidebar -->
+            {% if user.is_authenticated %}
+            <div id="star-sidebar-trigger" class="floating-star floating-star-bottom" title="View Saved Events">
+                <i class="bi bi-star-fill"></i>
+                <span class="username-badge">{{ user.username }}</span>
+            </div>
+            <div id="saved-events-sidebar" class="sidebar-popup">
+                <div class="sidebar-header d-flex justify-content-between align-items-center">
+                    <span>⭐ My Saved Events</span>
+                    <button class="btn btn-outline-danger btn-sm" id="close-sidebar"><i class="bi bi-x"></i></button>
+                </div>
+                <div id="sidebar-events-list">
+                    {% for saved_event in saved_events %}
+                    <div class="sidebar-event-item d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <strong>{{ saved_event.event_title }}</strong><br>
+                            <small>{{ saved_event.event_time|date:"Y-m-d H:i" }}</small>
+                        </div>
+                        <form method="post" action="{% url 'astroapp:remove_event' saved_event.id %}" style="display:inline;">
+                            {% csrf_token %}
+                            <button class="btn btn-outline-danger btn-sm ms-2" type="submit"><i class="bi bi-trash"></i></button>
+                        </form>
+                    </div>
+                    {% empty %}
+                    <div class="text-secondary small">No events saved yet.</div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% else %}
+            <div id="star-sidebar-trigger" class="floating-star floating-star-bottom" data-bs-toggle="tooltip" data-bs-placement="left" title="Login to save and view events">
+                <i class="bi bi-star"></i>
+            </div>
+            {% endif %}
+
+            <!-- Stargazing Spots Section -->
+            <div class="card card-space mb-4">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h3 class="section-title mb-0">
+                        <i class="bi bi-geo-alt-fill"></i> Best Stargazing Spots
+                        <span class="badge bg-info ms-2">
+                            <i class="bi bi-stars"></i> AI Curated
+                            <i class="bi bi-info-circle ms-1" data-bs-toggle="tooltip" title="Locations are ranked based on light pollution data, elevation, and weather patterns"></i>
+                        </span>
+                        <span class="text-secondary small ms-2">(General recommendation, not location-specific)</span>
+                    </h3>
+                    <button class="btn btn-outline-info btn-sm" type="button" data-bs-toggle="collapse" data-bs-target="#spotsSection">
+                        <i class="bi bi-chevron-down"></i>
+                    </button>
+                </div>
+                <div class="collapse" id="spotsSection">
+                    <div class="spots-grid">
+                        <div class="spot-card">
+                            <i class="bi bi-moon-stars spot-icon"></i>
+                            <h4>City Observatory Park</h4>
+                            <div class="spot-tags">
+                                <span class="badge bg-success">Low Light Pollution</span>
+                                <span class="badge bg-info">Public Access</span>
+                            </div>
+                            <p>Perfect for telescope setup. Open until midnight.</p>
+                        </div>
+                        <div class="spot-card">
+                            <i class="bi bi-tree spot-icon"></i>
+                            <h4>Highland Nature Reserve</h4>
+                            <div class="spot-tags">
+                                <span class="badge bg-success">Dark Sky Site</span>
+                                <span class="badge bg-warning">Parking Available</span>
+                            </div>
+                            <p>Natural elevation, clear horizons.</p>
+                        </div>
+                        <div class="spot-card">
+                            <i class="bi bi-building spot-icon"></i>
+                            <h4>Skyview Terrace</h4>
+                            <div class="spot-tags">
+                                <span class="badge bg-info">Urban Location</span>
+                                <span class="badge bg-primary">Easy Access</span>
+                            </div>
+                            <p>Elevated viewing platform in the city center.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Events Section -->
+            <div class="card card-space mb-4 events-section">
+                <h2 class="section-title mb-3">🌠 Upcoming Celestial Events <span data-bs-toggle="tooltip" title="Events visible from your location.">🛈</span></h2>
+                <div id="spinner" class="loader-space" style="display:none;"><div class="moon"></div></div>
+                <div class="row g-4 event-card-grid" id="events-list">
+                    {% for event in events %}
+                    <div class="col-md-4">
+                        <div class="card card-space card-flip h-100">
+                            <div class="card-inner">
+                                <div class="card-front card-body d-flex flex-column">
+                                    <h5 class="card-title mb-2" style="font-family: 'Orbitron', Arial, sans-serif;">{{ event.name }}</h5>
+                                    {% if event.localtime %}
+                                        <p class="card-text mb-1"><strong>Local Time:</strong> {{ event.localtime }}</p>
+                                        {% if event.datetime %}<p class="card-text mb-1"><strong>UTC:</strong> {{ event.datetime|date:"Y-m-d H:i" }}</p>{% endif %}
+                                    {% elif event.datetime %}
+                                        <p class="card-text mb-1"><strong>Time (UTC):</strong> {{ event.datetime|date:"Y-m-d H:i" }}</p>{% endif %}
+                                    <p class="card-text mb-2"><strong>Visibility:</strong> {{ event.visibility }}</p>
+                                    <div class="d-flex flex-row gap-2 mt-auto align-items-center justify-content-between">
+                                        {% if event.url %}
+                                        <a href="{{ event.url }}" target="_blank" class="btn btn-info learn-more-btn"><i class="bi bi-info-circle"></i> Learn More</a>
+                                        {% endif %}
+                                        {% if user.is_authenticated %}
+                                            <a href="{% url 'astroapp:save_event' event.id %}?name={{ event.name|urlencode }}&description={{ event.description|urlencode }}&datetime={{ event.datetime|date:'c'|urlencode }}&location={{ event.location|urlencode }}" class="btn btn-outline-warning save-event-btn"
+                                               data-event-name="{{ event.name|escapejs }}"
+                                               data-event-description="{{ event.description|escapejs }}"
+                                               data-event-datetime="{{ event.datetime|date:'c'|escapejs }}"
+                                               data-event-location="{{ event.location|escapejs }}">
+                                               <i class="bi bi-star"></i> Save to My Events
+                                            </a>
+                                        {% else %}
+                                            <a href="{% url 'users:signup' %}?next={% url 'astroapp:save_event' event.id %}?name={{ event.name|urlencode }}&description={{ event.description|urlencode }}&datetime={{ event.datetime|date:'c'|urlencode }}&location={{ event.location|urlencode }}" class="btn btn-outline-warning save-event-btn"
+                                               data-event-name="{{ event.name|escapejs }}"
+                                               data-event-description="{{ event.description|escapejs }}"
+                                               data-event-datetime="{{ event.datetime|date:'c'|escapejs }}"
+                                               data-event-location="{{ event.location|escapejs }}">
+                                               <i class="bi bi-star"></i> Save to My Events
+                                            </a>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                                <div class="card-back">
+                                    <h6>Event Details</h6>
+                                    <p>{{ event.description }}</p>
+                                    <button class="btn btn-secondary flip-back-btn mt-2"><i class="bi bi-arrow-left"></i> Back</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <!-- NASA Cosmic Feed Section -->
+            <div class="card card-space mb-4 section-block">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="section-title">🪐 NASA Cosmic Feed</span>
+                </div>
+                <!-- APOD -->
+                {% if celestial_apod %}
+                <div class="card-content mb-4 flex-column flex-md-row align-items-center gap-4">
+                    <div class="card-img w-100" style="max-width:340px;">
+                        {% if celestial_apod.media_type == 'image' %}
+                            <img src="{{ celestial_apod.url }}" alt="APOD" class="img-fluid rounded shadow-sm apod-img" loading="lazy">
+                        {% elif celestial_apod.media_type == 'video' %}
+                            <iframe src="{{ celestial_apod.url }}" class="w-100 rounded shadow-sm apod-img" style="min-height:140px;max-height:220px;" allowfullscreen></iframe>
+                        {% endif %}
+                    </div>
+                    <div class="card-details d-flex flex-column justify-content-center w-100" style="min-width:0;">
+                        <div class="card-title mb-2">🌌 Cosmic Highlight Today: {{ celestial_apod.title }}</div>
+                        <div class="card-desc mb-2">{{ celestial_apod.explanation }}</div>
+                        {% if celestial_apod.copyright %}<span class="text-secondary small mb-2">&copy; {{ celestial_apod.copyright }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+                <!-- NEOs -->
+                <div class="mb-4">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="card-title">☄️ Near-Earth Objects (Asteroids)</span>
+                        <button class="btn btn-outline-info btn-sm ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#neos-section" aria-expanded="false" aria-controls="neos-section">Show/Hide</button>
+                    </div>
+                    <div class="collapse" id="neos-section">
+                        <div class="card-details">
+                            {% if celestial_neos and celestial_neos|length > 0 %}
+                            <div class="table-responsive">
+                            <table class="table table-dark table-sm table-bordered align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>Name</th>
+                                        <th>Distance (km)</th>
+                                        <th>Diameter (m)</th>
+                                        <th>Velocity (km/h)</th>
+                                        <th>Hazard?</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for n in celestial_neos %}
+                                    <tr>
+                                        <td><a href="{{ n.url }}" target="_blank" style="color:#7ecbff;">{{ n.name }}</a></td>
+                                        <td>{{ n.distance|floatformat:0 }}</td>
+                                        <td>{{ n.diameter|floatformat:1 }}</td>
+                                        <td>{{ n.velocity|floatformat:0 }}</td>
+                                        <td>{% if n.hazardous %}<span class="badge bg-danger">Yes</span>{% else %}<span class="badge bg-success">No</span>{% endif %}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            </div>
+                            {% else %}
+                            <div class="text-secondary small">No significant near-Earth objects today.</div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+                <!-- Solar Events -->
+                <div class="mb-2">
+                    <div class="d-flex align-items-center mb-2">
+                        <span class="card-title">🔥 Space Weather (Solar Flares, CMEs)</span>
+                        <button class="btn btn-outline-warning btn-sm ms-auto" type="button" data-bs-toggle="collapse" data-bs-target="#solar-section" aria-expanded="false" aria-controls="solar-section">Show/Hide</button>
+                    </div>
+                    <div class="collapse" id="solar-section">
+                        <div class="card-details">
+                            {% if celestial_solar and celestial_solar|length > 0 %}
+                            <ul class="list-unstyled mb-0">
+                                {% for s in celestial_solar %}
+                                <li class="mb-2">
+                                    <span style="color:#ffb347;">{{ s.type }}</span> — <span style="color:#c0d3ff;">{{ s.start_time }}</span>
+                                    {% if s.source_location %} | Region: <span style="color:#7ecbff;">{{ s.source_location }}</span>{% endif %}
+                                    {% if s.active_region_num %} | AR: <span style="color:#7ecbff;">{{ s.active_region_num }}</span>{% endif %}
+                                    {% if s.note %}<br><span class="text-secondary small">{{ s.note }}</span>{% endif %}
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% else %}
+                            <span class="text-secondary small">No major solar events in the past week.</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Login Modal -->
+    <div class="modal fade" id="loginModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">Login to AstroBuddy</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="loginForm">
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control bg-dark text-light" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-control bg-dark text-light" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Login</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Signup Modal -->
+    <div class="modal fade" id="signupModal" tabindex="-1">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content bg-dark">
+                <div class="modal-header border-0">
+                    <h5 class="modal-title">Join AstroBuddy</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="signupForm">
+                        <div class="mb-3">
+                            <label class="form-label">Username</label>
+                            <input type="text" class="form-control bg-dark text-light" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Email</label>
+                            <input type="email" class="form-control bg-dark text-light" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Password</label>
+                            <input type="password" class="form-control bg-dark text-light" required>
+                        </div>
+                        <button type="submit" class="btn btn-primary w-100">Sign Up</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="{% static 'astrobuddy.js' %}"></script>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const homeNavItem = document.getElementById('home-nav-item');
+            if (window.location.pathname === '/') {
+                homeNavItem.style.display = 'none';
+            }
+
+            // Notification logic
+            const savedEventsData = JSON.parse('{{ saved_events_json|default:"[]"|escapejs }}');
+            
+            const savedEvents = savedEventsData.map(e => ({
+                name: e.name,
+                time: new Date(e.datetime)
+            }));
+
+            function scheduleNotifications() {
+                const now = new Date();
+                savedEvents.forEach(event => {
+                    const eventTime = event.time;
+                    const notificationTime = new Date(eventTime.getTime() - 30 * 60 * 1000);
+
+                    if (notificationTime > now) {
+                        const delay = notificationTime.getTime() - now.getTime();
+                        setTimeout(() => {
+                            new Notification('AstroBuddy Event Reminder', {
+                                body: `Your saved event "${event.name}" is starting in 30 minutes!`,
+                                icon: "{% static 'assets/astronaut 1.png' %}"
+                            });
+                        }, delay);
+                    }
+                });
+            }
+
+            if ('Notification' in window) {
+                if (Notification.permission === 'granted') {
+                    scheduleNotifications();
+                } else if (Notification.permission !== 'denied' || localStorage.getItem('notificationPrompted') !== 'true') {
+                    localStorage.setItem('notificationPrompted', 'true');
+                    Notification.requestPermission().then(permission => {
+                        if (permission === 'granted') {
+                            scheduleNotifications();
+                        }
+                    });
+                }
+            }
+        });
+    </script>
+</body>
+</html> 
